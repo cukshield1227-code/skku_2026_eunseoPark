@@ -116,6 +116,20 @@
       margin-top: 24px;
     }
 
+    .banner {
+      margin-top: 18px;
+      padding: 12px 16px;
+      border: 1px solid var(--divider-soft);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--body-muted);
+      font-size: 14px;
+      line-height: 1.43;
+      min-height: 46px;
+      display: flex;
+      align-items: center;
+    }
+
     .card {
       position: relative;
       background: var(--canvas);
@@ -342,6 +356,22 @@
       line-height: 1.6;
     }
 
+    .status {
+      margin-top: 12px;
+      font-size: 14px;
+      line-height: 1.43;
+      color: var(--body-muted);
+      min-height: 20px;
+    }
+
+    .status.ok {
+      color: #1d7a3a;
+    }
+
+    .status.err {
+      color: #b42318;
+    }
+
     .animating .ball {
       animation: float 900ms ease-in-out infinite alternate;
     }
@@ -401,6 +431,7 @@
           <button class="primary" id="drawBtn">추첨하기</button>
           <button class="secondary" id="resetBtn">초기화</button>
         </div>
+        <div class="banner" id="topBanner">준비가 완료되면 추첨 버튼을 눌러 저장을 시작합니다.</div>
       </div>
     </section>
 
@@ -429,6 +460,7 @@
 
             <div>
               <p class="note">추첨 버튼을 누르면 번호가 바뀌고, 기록은 오른쪽 패널에 차곡차곡 쌓입니다.</p>
+              <div class="status" id="saveStatus"></div>
             </div>
           </section>
 
@@ -468,6 +500,8 @@
     const resetBtn = document.getElementById('resetBtn');
     const drawCountEl = document.getElementById('drawCount');
     const lastSumEl = document.getElementById('lastSum');
+    const saveStatusEl = document.getElementById('saveStatus');
+    const topBannerEl = document.getElementById('topBanner');
 
     const ballNodes = [...ballsEl.querySelectorAll('.ball')];
     let history = [];
@@ -519,6 +553,45 @@
       lastSumEl.textContent = numbers.reduce((sum, n) => sum + n, 0);
     }
 
+    function setSaveStatus(message, type = '') {
+      saveStatusEl.textContent = message;
+      saveStatusEl.className = `status ${type}`.trim();
+      topBannerEl.textContent = message;
+      topBannerEl.style.color = type === 'err' ? '#b42318' : type === 'ok' ? '#1d7a3a' : 'var(--body-muted)';
+    }
+
+    async function saveDraw(numbers) {
+      if (location.protocol === 'file:') {
+        setSaveStatus('로컬 파일로 열어서 저장 API를 호출할 수 없습니다. Vercel 배포본에서 테스트해 주세요.', 'err');
+        return;
+      }
+
+      setSaveStatus('Supabase에 저장 중...', '');
+
+      try {
+        const response = await fetch(`${window.location.origin}/api/draw`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            numbers,
+            sum: numbers.reduce((sum, n) => sum + n, 0),
+          }),
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(data.error || '저장에 실패했습니다.');
+        }
+
+        setSaveStatus('Supabase에 저장되었습니다.', 'ok');
+      } catch (error) {
+        setSaveStatus(`저장 실패: ${error.message}`, 'err');
+      }
+    }
+
     async function drawLotto() {
       if (isDrawing) return;
       isDrawing = true;
@@ -537,6 +610,8 @@
       renderBalls(result, true);
       renderHistory();
       updateStats(result);
+      setSaveStatus('추첨 완료. 저장 요청 중...', '');
+      await saveDraw(result);
 
       ballsEl.classList.remove('animating');
       drawBtn.disabled = false;
@@ -549,6 +624,7 @@
       drawCount = 0;
       drawCountEl.textContent = '0';
       lastSumEl.textContent = '0';
+      setSaveStatus('준비가 완료되면 추첨 버튼을 눌러 저장을 시작합니다.', '');
       renderBalls(['?', '?', '?', '?', '?', '?']);
       renderHistory();
     }

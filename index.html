@@ -568,9 +568,19 @@
       topBannerEl.style.color = type === 'err' ? '#b42318' : type === 'ok' ? '#1d7a3a' : 'var(--body-muted)';
     }
 
+    function trackEvent(name, params = {}) {
+      if (typeof window.gtag === 'function') {
+        window.gtag('event', name, params);
+      }
+    }
+
     async function saveDraw(numbers) {
       if (location.protocol === 'file:') {
         setSaveStatus('로컬 파일로 열어서 저장 API를 호출할 수 없습니다. Vercel 배포본에서 테스트해 주세요.', 'err');
+        trackEvent('save_draw_failed', {
+          reason: 'local_file',
+          event_category: 'lotto',
+        });
         return;
       }
 
@@ -595,8 +605,17 @@
         }
 
         setSaveStatus('Supabase에 저장되었습니다.', 'ok');
+        trackEvent('save_draw_success', {
+          event_category: 'lotto',
+          numbers: numbers.join(','),
+          sum: numbers.reduce((sum, n) => sum + n, 0),
+        });
       } catch (error) {
         setSaveStatus(`저장 실패: ${error.message}`, 'err');
+        trackEvent('save_draw_failed', {
+          event_category: 'lotto',
+          reason: error.message,
+        });
       }
     }
 
@@ -606,6 +625,9 @@
       drawBtn.disabled = true;
       drawBtn.textContent = '추첨 중...';
       ballsEl.classList.add('animating');
+      trackEvent('draw_click', {
+        event_category: 'lotto',
+      });
 
       const previewFrames = 10;
       for (let i = 0; i < previewFrames; i += 1) {
